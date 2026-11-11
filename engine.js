@@ -1,4 +1,4 @@
-// UTAU OTO Template Generator v0.04 — calculation engine. No audio analysis.
+// UTAU OTO Template Generator v0.05 — calculation engine. No audio analysis.
 // Source definitions are copied unchanged from UTAU Reclist Generator v0.44.
 (function(root){
 'use strict';
@@ -29,10 +29,19 @@ function consonantOf(s){const g=groupOf(s);return g==='N'?'n':g==='VOWEL'?null:g
 function vowelOf(s){return s==='ん'?'n':SOUNDS[s]?.vowel?.toLowerCase()||null;}
 function parseTokens(s){let v=s.replace(/^_+/,''),out=[];while(v){const found=soundKeys.find(k=>v.startsWith(k));if(!found)throw Error(`未知假名：${v.slice(0,12)}（来源 ${s}）`);out.push(found);v=v.slice(found.length);}return out;}
 function normalizeNumberedName(s){return s.replace(/^\d+(?=_)/,'');}
-function parseReclist(input, overrideType){
+// v0.05: Filename fallback is intentionally narrow; metadata remains authoritative.
+function typeFromFilename(filename=''){
+ const stem=filename.replace(/\.[^.]*$/,'');
+ if(/cvvc/i.test(stem))return 'CVVC';
+ if(/vcv/i.test(stem))return 'VCV';
+ if(/(?:^|[^a-z0-9])cv(?=$|[^a-z0-9])/i.test(stem))return 'CV';
+ if(/rentanjutsu/i.test(stem))return 'RENTAN_JUTSU';
+ return null;
+}
+function parseReclist(input, overrideType, filename=''){
  const metaLine=input.split(/\r?\n/).find(x=>/^#RECLIST_META\s*:/.test(x.trim()));
  let meta=null;if(metaLine){try{meta=JSON.parse(metaLine.slice(metaLine.indexOf(':')+1).trim());}catch(e){throw Error('Reclist Metadata JSON 无法解析');}if(meta.v!==1)throw Error('不支持的 Metadata 版本：'+meta.v);}
- const type=overrideType||meta?.type; if(!['CV','RENTAN_FU','RENTAN_JUTSU','VCV','CVVC'].includes(type))throw Error('请选择录音表类型，或导入包含 Metadata 的 TXT');
+ const type=overrideType||meta?.type||typeFromFilename(filename); if(!['CV','RENTAN_FU','RENTAN_JUTSU','VCV','CVVC'].includes(type))throw Error('请选择录音表类型，或导入包含 Metadata 的 TXT');
  const rows=[];const issues=[];
  for(const raw of input.split(/\r?\n/)){
   const line=raw.trim();if(!line||line.startsWith('#')||line.includes('録音終了')||line.includes('録音終わり')||line.includes('お疲れ様'))continue;
@@ -41,7 +50,9 @@ function parseReclist(input, overrideType){
    if(!word||!/[ぁ-ゖァ-ヺ]/u.test(word))continue;
    const filename=word+'.wav',body=normalizeNumberedName(word);
    try{
-    const spaced=type==='RENTAN_FU'||(type==='CVVC'&&/^_(?:[^_]+_){1,}/.test(body));
+    // v0.05: The three short-u CVs also support a separated RenTanJutsu recording row.
+    const separatedShortTrio=type==='RENTAN_JUTSU' && /^_(?:ふゅ|てゅ|でゅ)_(?:ふゅ|てゅ|でゅ)_(?:ふゅ|てゅ|でゅ)$/.test(body);
+    const spaced=type==='RENTAN_FU'||(type==='CVVC'&&/^_(?:[^_]+_){1,}/.test(body))||separatedShortTrio;
     const sounds=spaced?body.split('_').filter(Boolean).flatMap(parseTokens):parseTokens(body);
     if(!sounds.length)continue;
     rows.push({raw:word,filename,sounds,spaced,independent:sounds.length===1,order:rows.length});
@@ -67,11 +78,11 @@ function parseBgm(txt, filename='', manualBpm=null){
  const vocal=events.has(3)?events.get(3)*factor:null;
  const bpmComment=txt.match(/\bBPM\s*[:=]\s*(\d+(?:\.\d+)?)/i);
  const moraComment=txt.match(/\bMora\s*[:=]\s*(\d+)/i);
- // Accept explicit BPM tags, and standalone tempo tokens in filenames such as Jazz-140-D#.txt.
+ // v0.05: Accept any unambiguous standalone 1xx BPM token in the BGM TXT filename.
  const stem=filename.replace(/\.[^.]*$/,'');
  const bpmTag=stem.match(/(?:^|[^a-z0-9])bpm[-_ ]*(\d+(?:\.\d+)?)(?=$|[^a-z0-9])/i);
- const tempoTokens=[...stem.matchAll(/(?:^|[^a-z0-9])((?:1[2-5]\d))(?=$|[^a-z0-9])/gi)]
-  .map(m=>Number(m[1])).filter(n=>n%5===0);
+ const tempoTokens=[...stem.matchAll(/(?<!\d)(1\d{2})(?!\d)/g)]
+  .map(m=>Number(m[1]));
  const fromName=bpmTag?Number(bpmTag[1]):(tempoTokens.length===1?tempoTokens[0]:null);
  const bpm=bpmComment?Number(bpmComment[1]):(fromName??Number(manualBpm));
  const mora=moraComment?Number(moraComment[1]):null;
@@ -126,8 +137,11 @@ function generate(reclist,bgm,options={}){
  const push=(e)=>{if(e)lines.push(e);};
  for(const row of reclist.rows){
   const ss=row.sounds,t=reclist.type,wav=row.filename,shortRow=ss.some(s=>SHORT_U.has(s));
+  // v0.05: The exact ふゅ/てゅ/でゅ trio is ordinary CV, never sentence-initial - CV.
+  // This applies to both _ふゅ_てゅ_でゅ and _ふゅてゅでゅ, in any of the trio's orders.
+  const shortTrio=(t==='RENTAN_JUTSU'||t==='CVVC') && ss.length===3 && ss.every(s=>SHORT_U.has(s)) && new Set(ss).size===3;
   let mode=t;
-  if(t==='CVVC'&&row.spaced)mode='RENTAN_FU';
+  if((t==='CVVC'&&row.spaced)||(t==='RENTAN_JUTSU'&&row.spaced&&shortTrio))mode='RENTAN_FU';
   if(t==='CVVC'&&row.independent)mode='CV';
   if(t==='RENTAN_FU'&&row.independent)mode='CV';
   if(t==='RENTAN_JUTSU'&&row.independent)mode='CV';
@@ -151,11 +165,11 @@ function generate(reclist,bgm,options={}){
      continue;
    }
    if(mode==='CV'||mode==='RENTAN_FU'){
-     const isStart=t==='CVVC' && row.spaced;
+     const isStart=t==='CVVC' && row.spaced && !shortTrio;
      const pre=isStart?150:(GROUP_OFFSET_CV[group]??100),kind=isStart?'start':'cv';
      push(makeEntry(wav,isStart?'- '+s:s,kind,s,p,pre,(isStart?.25:mode==='CV'?.5:.25)*B,(isStart?.9:mode==='CV'?1.5:.9)*B,opts,row.raw));
    }else if(mode==='RENTAN_JUTSU'||t==='CVVC'){
-     const first=i===0;
+     const first=i===0 && !shortTrio;
      const pre=first?150:(GROUP_OFFSET_SHORT[group]??60);
      // 連単術: first sound is -CV; final repeated sound is regular CV.
      const alias=first?'- '+s:s;

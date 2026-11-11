@@ -1,4 +1,4 @@
-# UTAU OTO Template Generator v0.04
+# UTAU OTO Template Generator v0.05
 
 by itsukiMNE
 
@@ -26,13 +26,6 @@ by itsukiMNE
 - bX：先不在初始模板中生成；等手动调整好 `- X` 后，再通过单独的派生步骤制作（已有 OTO Overlap Editor 可使用）。
 - Overlap：依照 UTAU OTO Overlap Editor 的别名分类规则，VC 采用 Pre × 0.4。
 
-## v0.03 修订
-
-- 暂停在初始模板中生成 bX；完成句首 `- X` 手动调整后再单独派生。
-- 所有 VC 条目集中排列在导出文件末尾。
-- 统一中文界面用词为「子音」，修正 CVVC 拼写，并从 VC 选择列表移除 `ty`、`dy`。
-- 勾选未录制的子音组不会产生 VC 条目。
-
 ## 重复与别名
 
 - CV / VCV 等的重复别名按录音表先后保留 1、2 或不限；第二个开始自动编号。
@@ -43,7 +36,7 @@ by itsukiMNE
 
 ## 使用限制与注意事项
 
-- 这是 **v0.04 测试版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
+- 这是 **v0.05 测试版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
 - 目前不读取实际 WAV 音频长度；`Cutoff` 使用负值（从 Offset 计算的右边界）；如果某些发音超出音频长度，需要用户手动修改。
 - BGM TXT 支持 sec / msec；按编号 2、3 读取 Recording Start / Vocal Start，事件说明文字不限语言。BPM 优先从 TXT 中的 BPM 字段读取，其次尝试文件名（例如 Jazz-140-D#.txt），无法识别时允许手动填写。计算不自行假设 Recording Start 固定为 1.0 秒。
 - 无法识别的音素会显示警告并跳过，不做自动猜测；用户自定义音素需要后续扩展支持。
@@ -60,16 +53,8 @@ by itsukiMNE
 
 首次制作：2026-11-10。
 
-## v0.03 修订
+## v0.05 修订
 
-- BGM TXT 支持 msec 毫秒单位与原有 sec 秒单位。
-- 不再依赖英文事件名称，按 OREMO 标号 2（录音开始）、3（正式发声）读取时间。
-- BPM 可从 TXT 内容、BGM 文件名提取；缺失时可手动输入。
-- 其余 OTO 参数和生成逻辑不变。
-
-## v0.04 修订
-
-- 对 CV、連単風、連単術、CVVC 中的独立母音／「ん」录音，一条 WAV 同时生成句首 `- X` 与普通 `X`。CV 类型兼容不带 `_` 的录音名。
-- 两条先行线的 WAV 内绝对位置相隔固定 300ms；各自的 Offset、子音线、右线及 Overlap 按所属录音方式计算。
-- VCV 的 `_んん.wav` 保留 `n ん`，但 VC 生成排除目标为「ん」的连接，不产生 `n n`。
-- 其他录音行及已有 OTO 调整模式保持不变。
+- 从 Reclist 文件名识别 CVVC、VCV、独立 CV 或完整 RenTanJutsu（忽略大小写）；有效 Metadata 优先，其他名称保持手动选择。
+- BGM TXT 文件名支持独立的 100–199 BPM 数字，不再限制为 5 的倍数。
+- 連単術、CVVC 中 `_ふゅ_てゅ_でゅ` 与 `_ふゅてゅでゅ` 的三音行只生成普通 CV，不生成句首 `- CV`。

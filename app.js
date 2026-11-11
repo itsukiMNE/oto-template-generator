@@ -1,13 +1,13 @@
 // v0.02: defer bX and collect VC entries at the end; preserve other generation rules.
 (()=>{'use strict';
 const E=OTOEngine,$=id=>document.getElementById(id);
-let mode='new',files={reclist:'',bgm:'',oto:''},bgmFilename='',results=null,inputEncoding='cp932';
+let mode='new',files={reclist:'',bgm:'',oto:''},reclistFilename='',bgmFilename='',results=null,inputEncoding='cp932';
 function readFile(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{const b=r.result;let s;try{s=new TextDecoder('utf-8',{fatal:true}).decode(b);return resolve({text:s,encoding:'utf8'});}catch(_){}try{s=new TextDecoder('shift_jis').decode(b);resolve({text:s,encoding:'cp932'});}catch(e){reject(e);}};r.onerror=()=>reject(r.error);r.readAsArrayBuffer(file);});}
-for(const [id,key] of [['reclistFile','reclist'],['bgmFile','bgm'],['otoFile','oto']])$(id).addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const v=await readFile(f);files[key]=v.text;if(key==='bgm')bgmFilename=f.name;inputEncoding=v.encoding;$(key+'Name').textContent=f.name; if(key==='oto')$('encoding').value=v.encoding;inspect();}catch(err){$('fileInfo').textContent='读取失败：'+err.message;}});
+for(const [id,key] of [['reclistFile','reclist'],['bgmFile','bgm'],['otoFile','oto']])$(id).addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const v=await readFile(f);files[key]=v.text;if(key==='bgm')bgmFilename=f.name;if(key==='reclist')reclistFilename=f.name;inputEncoding=v.encoding;$(key+'Name').textContent=f.name; if(key==='oto')$('encoding').value=v.encoding;inspect();}catch(err){$('fileInfo').textContent='读取失败：'+err.message;}});
 function inspect(){try{
  if(mode==='new'){
   if(!files.reclist||!files.bgm)return;
-  const r=E.parseReclist(files.reclist,$('type').value||null),b=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
+  const r=E.parseReclist(files.reclist,$('type').value||null,reclistFilename),b=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
   $('fileInfo').textContent=`${r.type} · ${r.rows.length} 个 WAV 项目 · BGM ${b.bpm} BPM / ${b.mora||'?'} mora\nRecording Start ${b.record}s · Vocal Start ${b.vocal}s · WAV 内首音 ${Math.round(b.p0)}ms`;
   const vc=['RENTAN_JUTSU','VCV'].includes(r.type),n=r.type==='VCV';$('vcOptions').classList.toggle('hidden',!vc);$('nasalOptions').classList.toggle('hidden',!n);
   // v0.01: VCV default leaves N/M unselected; users can enable either manually.
@@ -32,7 +32,7 @@ $('filter').addEventListener('change',render);$('search').addEventListener('inpu
 $('generate').addEventListener('click',()=>{try{
  if(mode==='new'){
   if(!files.reclist||!files.bgm)throw Error('请先导入 Reclist TXT 和 BGM TXT');
-  const reclist=E.parseReclist(files.reclist,$('type').value||null),bgm=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
+  const reclist=E.parseReclist(files.reclist,$('type').value||null,reclistFilename),bgm=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
   results=E.generate(reclist,bgm,{duplicate:$('duplicates').value,vcGroups:chosen('vc'),nasalGroups:chosen('nasal'),generateR:$('r').checked,generateU2:$('u2').checked,overlap:$('overlap').value});
  }else{
   if(!files.oto)throw Error('请先导入已有 oto.ini');const type=$('type').value||'CV',bpm=Number($('manualBpm').value);if(!(bpm>0))throw Error('BPM 必须大于零');
