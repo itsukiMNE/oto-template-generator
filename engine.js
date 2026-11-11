@@ -1,9 +1,9 @@
-// UTAU OTO Template Generator v0.06 — calculation engine. No audio analysis.
+// UTAU OTO Template Generator v0.07 — calculation engine. No audio analysis.
 // Source definitions are copied unchanged from UTAU Reclist Generator v0.44.
 (function(root){
 'use strict';
-const GROUP_OFFSET_CV = {VOWEL:10,N:70,MORAIC_N:10,K:100,S:180,T:85,H:105,M:70,Y:60,R:65,W:50,G:75,Z:100,D:40,B:45,P:90,KY:100,SH:160,CH:125,NY:50,HY:115,MY:50,RY:65,GY:60,J:95,BY:35,PY:90,TS:125,F:120,V:70,TY:85,DY:40};
-const GROUP_OFFSET_SHORT = {VOWEL:10,N:60,MORAIC_N:10,K:55,S:95,T:40,H:60,M:70,Y:60,R:50,W:50,G:50,Z:65,D:30,B:45,P:50,KY:60,SH:95,CH:85,NY:60,HY:75,MY:65,RY:45,GY:45,J:65,BY:35,PY:50,TS:80,F:75,V:55,TY:40,DY:30};
+const GROUP_OFFSET_CV = {VOWEL:10,N:70,MORAIC_N:10,K:100,S:180,T:85,H:105,M:70,Y:60,R:65,W:50,G:75,Z:100,D:40,B:45,P:90,KY:100,SH:160,CH:125,NY:50,HY:115,MY:50,RY:65,GY:70,J:95,BY:45,PY:100,TS:125,F:120,V:70,TY:85,DY:40};
+const GROUP_OFFSET_SHORT = {VOWEL:10,N:60,MORAIC_N:10,K:55,S:95,T:40,H:60,M:70,Y:60,R:50,W:50,G:50,Z:65,D:30,B:45,P:50,KY:60,SH:95,CH:85,NY:60,HY:75,MY:65,RY:45,GY:55,J:65,BY:45,PY:60,TS:80,F:75,V:55,TY:40,DY:30};
 const HIGH=['k','t','p','s','sh','hy','n','m'];
 // v0.02: TY/DY are not selectable VC groups. Kana parsing stays unchanged.
 const LOW=['ky','gy','by','py','ry','ny','my','h'];
@@ -23,6 +23,11 @@ for(const [sound,id] of Object.entries({'ヴ':'V'})) groupMap.set(sound,id);
 // v0.01: common foreign-vowel extension handled explicitly if present in a reclist.
 if(!SOUNDS['ふぅ'])SOUNDS['ふぅ']={vowel:'u'};
 groupMap.set('ふぅ','F');
+// v0.07: Y/W helper sounds are actual CV sounds in some RenTanJutsu reclists.
+if(!SOUNDS['いぃ'])SOUNDS['いぃ']={vowel:'i'};
+if(!SOUNDS['うぅ'])SOUNDS['うぅ']={vowel:'u'};
+groupMap.set('いぃ','Y');
+groupMap.set('うぅ','W');
 const soundKeys = Object.keys(SOUNDS).sort((a,b)=>b.length-a.length);
 // v0.06: Keep な行 (N) separate from the moraic nasal ん.
 function groupOf(s){return s==='ん'?'MORAIC_N':groupMap.get(s)|| (VOWEL_SET.has(s)?'VOWEL':null);}
@@ -36,7 +41,9 @@ function typeFromFilename(filename=''){
  if(/cvvc/i.test(stem))return 'CVVC';
  if(/vcv/i.test(stem))return 'VCV';
  if(/(?:^|[^a-z0-9])cv(?=$|[^a-z0-9])/i.test(stem))return 'CV';
- if(/rentanjutsu/i.test(stem))return 'RENTAN_JUTSU';
+ // v0.07: Recognize the actual Reclist Generator filename abbreviations.
+ if(/(?:^|[^a-z0-9])rtj(?=$|[^a-z0-9])/i.test(stem)||/rentanjutsu/i.test(stem))return 'RENTAN_JUTSU';
+ if(/(?:^|[^a-z0-9])rtf(?=$|[^a-z0-9])/i.test(stem))return 'RENTAN_FU';
  return null;
 }
 function parseReclist(input, overrideType, filename=''){
@@ -167,7 +174,8 @@ function generate(reclist,bgm,options={}){
      push(makeEntry(wav,'- '+s,'start',s,p,140,startCon,startRight,opts,row.raw));
      const cvP=p+300; // v0.04: Fixed 300ms gap; does not scale with BPM.
      const pre=(shortMode?GROUP_OFFSET_SHORT:GROUP_OFFSET_CV)[group]??10;
-     push(makeEntry(wav,s,'cv',s,cvP,pre,(shortMode?.2:.5)*B,(shortMode?.6:1.5)*B,opts,row.raw));
+     // v0.07: Sustained standalone vowel/ん uses short fixed lines for the second CV.
+     push(makeEntry(wav,s,'cv',s,cvP,pre,50,200,opts,row.raw));
      continue;
    }
    if(mode==='CV'||mode==='RENTAN_FU'){

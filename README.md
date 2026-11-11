@@ -1,4 +1,4 @@
-# UTAU OTO Template Generator v0.06
+# UTAU OTO Template Generator v0.07
 
 by itsukiMNE
 
@@ -7,7 +7,7 @@ by itsukiMNE
 ## 使用方法
 
 1. 解压整个 ZIP，保持所有文件在同一目录。双击 `index.html`。
-2. 选择 **Generate Template**：导入带 `#RECLIST_META` 的录音表 TXT 和 BGM TXT，查看识别模式；没有 Metadata 时手动指定录音类型。
+2. 选择 **Generate Template**：导入带 `#RECLIST_META` 的录音表 TXT 和 BGM TXT，查看识别模式；没有 Metadata 时可从受支持的文件名自动识别类型，或手动指定。
 3. 选择需要的 VC、拨音、语尾和 Overlap 选项，再单击「生成预览」。
 4. 检查别名、时间和警告，下载 `oto.ini`。
 5. **Adjust Existing OTO** 模式：导入已有 `oto.ini`，指定录音类型和 BPM。生成时 `Offset + Preutterance` 的绝对时间保持不变，可选择修改其他参数。
@@ -36,7 +36,7 @@ by itsukiMNE
 
 ## 使用限制与注意事项
 
-- 这是 **v0.06 测试版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
+- 这是 **v0.07 测试版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
 - 目前不读取实际 WAV 音频长度；`Cutoff` 使用负值（从 Offset 计算的右边界）；如果某些发音超出音频长度，需要用户手动修改。
 - BGM TXT 支持 sec / msec；按编号 2、3 读取 Recording Start / Vocal Start，事件说明文字不限语言。BPM 优先从 TXT 中的 BPM 字段读取，其次尝试文件名（例如 Jazz-140-D#.txt），无法识别时允许手动填写。计算不自行假设 Recording Start 固定为 1.0 秒。
 - 无法识别的音素会显示警告并跳过，不做自动猜测；用户自定义音素需要后续扩展支持。
@@ -53,10 +53,9 @@ by itsukiMNE
 
 首次制作：2026-11-10。
 
-## v0.06 修订
+## v0.07 修订
 
-- 补充独立「ん」录音的 `n R` 生成。
-- Reclist/BGM TXT 导入后立即显示识别结果，并自动填写录音类型及 BPM（手动修改后不覆盖）。
-- 句首 `- CV` 的前置距离调整为 140ms。
-- 区分な行 N 与拨音「ん」，修复子音前置距离。
-- G、B、P 组前置距离各增加 10ms；CV／連単風普通母音与「ん」统一为 Preutterance 10ms、自动 Overlap 20ms。
+- GY、BY、PY 子音前置距离分别增加 10ms（CV／連単風及連単術／CVVC）。
+- 独立母音和「ん」双 CV 切出时，第二条普通 CV 的子音线调整为先行线后 50ms，右线为后 200ms；先行线仍后移 300ms。
+- 支持将 `いぃ`、`うぅ` 识别为 Y、W 行音素，分别按母音 i、u 处理。
+- Reclist 文件名新增 `RTF`（連単風）、`RTJ`（連単術）识别，不增加 mora 文件名推断。
