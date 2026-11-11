@@ -1,0 +1,1 @@
+# oto-template-generator
