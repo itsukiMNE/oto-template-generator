@@ -1,21 +1,49 @@
-// v0.02: defer bX and collect VC entries at the end; preserve other generation rules.
+// v0.06: instant filename/metadata feedback; preserve existing OTO generation behavior.
 (()=>{'use strict';
 const E=OTOEngine,$=id=>document.getElementById(id);
 let mode='new',files={reclist:'',bgm:'',oto:''},reclistFilename='',bgmFilename='',results=null,inputEncoding='cp932';
+// v0.06: Only automatic detection updates controls until the user explicitly changes them.
+let manualType=false,manualNewBpm=false;
 function readFile(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>{const b=r.result;let s;try{s=new TextDecoder('utf-8',{fatal:true}).decode(b);return resolve({text:s,encoding:'utf8'});}catch(_){}try{s=new TextDecoder('shift_jis').decode(b);resolve({text:s,encoding:'cp932'});}catch(e){reject(e);}};r.onerror=()=>reject(r.error);r.readAsArrayBuffer(file);});}
-for(const [id,key] of [['reclistFile','reclist'],['bgmFile','bgm'],['otoFile','oto']])$(id).addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const v=await readFile(f);files[key]=v.text;if(key==='bgm')bgmFilename=f.name;if(key==='reclist')reclistFilename=f.name;inputEncoding=v.encoding;$(key+'Name').textContent=f.name; if(key==='oto')$('encoding').value=v.encoding;inspect();}catch(err){$('fileInfo').textContent='读取失败：'+err.message;}});
+for(const [id,key] of [['reclistFile','reclist'],['bgmFile','bgm'],['otoFile','oto']])$(id).addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const v=await readFile(f);files[key]=v.text;if(key==='bgm')bgmFilename=f.name;if(key==='reclist')reclistFilename=f.name;inputEncoding=v.encoding;$(key+'Name').textContent=f.name; if(key==='oto')$('encoding').value=v.encoding;syncDetectedInputs(key);inspect();}catch(err){$('fileInfo').textContent='读取失败：'+err.message;}});
+// v0.06: Run detection immediately after each TXT import; do not wait for both files.
+function syncDetectedInputs(key){
+ if(mode!=='new')return;
+ if(key==='reclist' && !manualType){
+  try{const detected=E.parseReclist(files.reclist,null,reclistFilename).type;
+   $('type').value=detected;
+  }catch(_){$('type').value='';}
+ }
+ if(key==='bgm' && !manualNewBpm){
+  const detected=E.detectBpm(files.bgm,bgmFilename);
+  $('newManualBpm').value=detected??'';
+ }
+}
 function inspect(){try{
  if(mode==='new'){
-  if(!files.reclist||!files.bgm)return;
-  const r=E.parseReclist(files.reclist,$('type').value||null,reclistFilename),b=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
-  $('fileInfo').textContent=`${r.type} · ${r.rows.length} 个 WAV 项目 · BGM ${b.bpm} BPM / ${b.mora||'?'} mora\nRecording Start ${b.record}s · Vocal Start ${b.vocal}s · WAV 内首音 ${Math.round(b.p0)}ms`;
-  const vc=['RENTAN_JUTSU','VCV'].includes(r.type),n=r.type==='VCV';$('vcOptions').classList.toggle('hidden',!vc);$('nasalOptions').classList.toggle('hidden',!n);
-  // v0.01: VCV default leaves N/M unselected; users can enable either manually.
-  if(vc && $('vcOptions').dataset.activeType!==r.type){for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value)&&!(n&&['n','m'].includes(x.value));$('vcOptions').dataset.activeType=r.type;}
+  const messages=[];
+  let r=null,b=null;
+  if(files.reclist){
+   try{r=E.parseReclist(files.reclist,$('type').value||null,reclistFilename);
+    messages.push(`Reclist: ${r.type} · ${r.rows.length} 个 WAV 项目`);
+   }catch(e){messages.push('Reclist: '+e.message);}
+  }
+  if(files.bgm){
+   const detected=E.detectBpm(files.bgm,bgmFilename);
+   messages.push('BGM BPM: '+(detected??($('newManualBpm').value||'未识别，请手动填写')));
+   try{b=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
+    messages.push(`BGM: ${b.bpm} BPM / ${b.mora||'?'} mora · Recording Start ${b.record}s · Vocal Start ${b.vocal}s · WAV 内首音 ${Math.round(b.p0)}ms`);
+   }catch(e){messages.push('BGM: '+e.message);}
+  }
+  $('fileInfo').textContent=messages.join('\n')||'等待导入文件。';
+  const type=r?.type||$('type').value;
+  const vc=['RENTAN_JUTSU','VCV'].includes(type),n=type==='VCV';
+  $('vcOptions').classList.toggle('hidden',!vc);$('nasalOptions').classList.toggle('hidden',!n);
+  if(vc && $('vcOptions').dataset.activeType!==type){for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value)&&!(n&&['n','m'].includes(x.value));$('vcOptions').dataset.activeType=type;}
  }else{if(files.oto)$('fileInfo').textContent=`已有 OTO · ${E.parseOto(files.oto).rows.length} 条 · 保留每条先行线绝对位置。`;}
  }catch(e){$('fileInfo').textContent='请检查输入：'+e.message;}}
-$('type').addEventListener('change',inspect);
-$('newManualBpm').addEventListener('input',inspect);
+$('type').addEventListener('change',()=>{if(mode==='new')manualType=true;inspect();});
+$('newManualBpm').addEventListener('input',()=>{manualNewBpm=true;inspect();});
 for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('click',()=>{mode=b.dataset.mode;for(const x of document.querySelectorAll('[data-mode]'))x.classList.toggle('active',x===b);$('newInputs').classList.toggle('hidden',mode!=='new');$('existingInputs').classList.toggle('hidden',mode!=='existing');$('newOptions').classList.toggle('hidden',mode!=='new');$('existingOptions').classList.toggle('hidden',mode!=='existing');$('fileInfo').textContent='等待导入文件。';if(mode==='existing'&&$('type').value==='')$('type').value='CV';results=null;render();inspect();});
 function renderGroups(container,defs){container.innerHTML='';for(const def of defs){const div=document.createElement('div');div.className='optiongroup';const header=document.createElement('div'),label=document.createElement('strong');label.textContent=def.title;const btn=document.createElement('button');btn.type='button';btn.textContent='全选 / 取消';header.append(label,btn);div.append(header);const chips=document.createElement('div');chips.className='chips';for(const name of def.items){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.value=name;c.name=def.name;c.checked=def.checked.includes(name);l.append(c,document.createTextNode(' '+name));chips.append(l);}btn.addEventListener('click',()=>{const cs=[...chips.querySelectorAll('input')],all=cs.every(x=>x.checked);cs.forEach(x=>x.checked=!all);});div.append(chips);container.append(div);}}
 const medium=E.ALL.filter(x=>!E.HIGH.includes(x)&&!E.LOW.includes(x));

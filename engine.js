@@ -1,9 +1,9 @@
-// UTAU OTO Template Generator v0.05 — calculation engine. No audio analysis.
+// UTAU OTO Template Generator v0.06 — calculation engine. No audio analysis.
 // Source definitions are copied unchanged from UTAU Reclist Generator v0.44.
 (function(root){
 'use strict';
-const GROUP_OFFSET_CV = {VOWEL:15,N:15,K:100,S:180,T:85,H:105,M:70,Y:60,R:65,W:50,G:65,Z:100,D:40,B:35,P:80,KY:100,SH:160,CH:125,NY:50,HY:115,MY:50,RY:65,GY:60,J:95,BY:35,PY:90,TS:125,F:120,V:70,TY:85,DY:40};
-const GROUP_OFFSET_SHORT = {VOWEL:10,N:10,K:55,S:95,T:40,H:60,M:70,Y:60,R:50,W:50,G:40,Z:65,D:30,B:35,P:40,KY:60,SH:95,CH:85,NY:60,HY:75,MY:65,RY:45,GY:45,J:65,BY:35,PY:50,TS:80,F:75,V:55,TY:40,DY:30};
+const GROUP_OFFSET_CV = {VOWEL:10,N:70,MORAIC_N:10,K:100,S:180,T:85,H:105,M:70,Y:60,R:65,W:50,G:75,Z:100,D:40,B:45,P:90,KY:100,SH:160,CH:125,NY:50,HY:115,MY:50,RY:65,GY:60,J:95,BY:35,PY:90,TS:125,F:120,V:70,TY:85,DY:40};
+const GROUP_OFFSET_SHORT = {VOWEL:10,N:60,MORAIC_N:10,K:55,S:95,T:40,H:60,M:70,Y:60,R:50,W:50,G:50,Z:65,D:30,B:45,P:50,KY:60,SH:95,CH:85,NY:60,HY:75,MY:65,RY:45,GY:45,J:65,BY:35,PY:50,TS:80,F:75,V:55,TY:40,DY:30};
 const HIGH=['k','t','p','s','sh','hy','n','m'];
 // v0.02: TY/DY are not selectable VC groups. Kana parsing stays unchanged.
 const LOW=['ky','gy','by','py','ry','ny','my','h'];
@@ -24,8 +24,9 @@ for(const [sound,id] of Object.entries({'ヴ':'V'})) groupMap.set(sound,id);
 if(!SOUNDS['ふぅ'])SOUNDS['ふぅ']={vowel:'u'};
 groupMap.set('ふぅ','F');
 const soundKeys = Object.keys(SOUNDS).sort((a,b)=>b.length-a.length);
-function groupOf(s){return groupMap.get(s)|| (VOWEL_SET.has(s)?'VOWEL':null);}
-function consonantOf(s){const g=groupOf(s);return g==='N'?'n':g==='VOWEL'?null:g?.toLowerCase()||null;}
+// v0.06: Keep な行 (N) separate from the moraic nasal ん.
+function groupOf(s){return s==='ん'?'MORAIC_N':groupMap.get(s)|| (VOWEL_SET.has(s)?'VOWEL':null);}
+function consonantOf(s){const g=groupOf(s);return g==='MORAIC_N'?'n':g==='VOWEL'?null:g?.toLowerCase()||null;}
 function vowelOf(s){return s==='ん'?'n':SOUNDS[s]?.vowel?.toLowerCase()||null;}
 function parseTokens(s){let v=s.replace(/^_+/,''),out=[];while(v){const found=soundKeys.find(k=>v.startsWith(k));if(!found)throw Error(`未知假名：${v.slice(0,12)}（来源 ${s}）`);out.push(found);v=v.slice(found.length);}return out;}
 function normalizeNumberedName(s){return s.replace(/^\d+(?=_)/,'');}
@@ -64,6 +65,15 @@ function parseReclist(input, overrideType, filename=''){
 }
 // v0.03: Parse OREMO event numbers (2 = recording, 3 = vocal), not localized labels.
 // Supports second/millisecond files and BPM in exported comments or the BGM filename.
+// v0.06: Share BPM detection with the instant file feedback.
+function detectBpm(txt,filename=''){
+ const bpmComment=txt.match(/\bBPM\s*[:=]\s*(\d+(?:\.\d+)?)/i);
+ if(bpmComment)return Number(bpmComment[1]);
+ const stem=filename.replace(/\.[^.]*$/,'');
+ const bpmTag=stem.match(/(?:^|[^a-z0-9])bpm[-_ ]*(\d+(?:\.\d+)?)(?=$|[^a-z0-9])/i);
+ const tempoTokens=[...stem.matchAll(/(?<!\d)(1\d{2})(?!\d)/g)].map(m=>Number(m[1]));
+ return bpmTag?Number(bpmTag[1]):(tempoTokens.length===1?tempoTokens[0]:null);
+}
 function parseBgm(txt, filename='', manualBpm=null){
  const lines=txt.replace(/^\uFEFF/,'').split(/\r?\n/);
  const unit=lines.find(l=>l.trim() && !l.trim().startsWith('#'))?.trim().toLowerCase();
@@ -76,15 +86,11 @@ function parseBgm(txt, filename='', manualBpm=null){
  const factor=unit==='msec'?0.001:1;
  const record=events.has(2)?events.get(2)*factor:null;
  const vocal=events.has(3)?events.get(3)*factor:null;
- const bpmComment=txt.match(/\bBPM\s*[:=]\s*(\d+(?:\.\d+)?)/i);
  const moraComment=txt.match(/\bMora\s*[:=]\s*(\d+)/i);
- // v0.05: Accept any unambiguous standalone 1xx BPM token in the BGM TXT filename.
- const stem=filename.replace(/\.[^.]*$/,'');
- const bpmTag=stem.match(/(?:^|[^a-z0-9])bpm[-_ ]*(\d+(?:\.\d+)?)(?=$|[^a-z0-9])/i);
- const tempoTokens=[...stem.matchAll(/(?<!\d)(1\d{2})(?!\d)/g)]
-  .map(m=>Number(m[1]));
- const fromName=bpmTag?Number(bpmTag[1]):(tempoTokens.length===1?tempoTokens[0]:null);
- const bpm=bpmComment?Number(bpmComment[1]):(fromName??Number(manualBpm));
+ const detectedBpm=detectBpm(txt,filename);
+ // v0.06: Explicitly entered BPM takes precedence over automatic values.
+ const manual=Number(manualBpm);
+ const bpm=manual>0?manual:detectedBpm;
  const mora=moraComment?Number(moraComment[1]):null;
  if(!(bpm>0))throw Error('无法识别 BPM：请在 BGM TXT 注释、文件名中提供 BPM，或手动填写');
  if(record===null||vocal===null||!(vocal>record))throw Error('BGM TXT 需要编号 2（Recording Start）与 3（Vocal Start）的有效时间');
@@ -155,10 +161,10 @@ function generate(reclist,bgm,options={}){
    // v0.04: Standalone vowel/ん uses one sustained WAV for both - CV and CV.
    // Keep both aliases even when a CV reclist filename has no leading underscore.
    if(row.independent && (VOWEL_SET.has(s) || s==='ん') && ['CV','RENTAN_FU','RENTAN_JUTSU','CVVC'].includes(t)){
-     const shortMode=t==='RENTAN_JUTSU';
+     const shortMode=t==='RENTAN_JUTSU'||t==='CVVC'; // v0.06: CVVC standalone nasal uses its short-CV presets.
      const startCon=(shortMode?.2:mode==='RENTAN_FU'?.25:.5)*B;
      const startRight=(shortMode?.6:mode==='RENTAN_FU'?.9:1.5)*B;
-     push(makeEntry(wav,'- '+s,'start',s,p,150,startCon,startRight,opts,row.raw));
+     push(makeEntry(wav,'- '+s,'start',s,p,140,startCon,startRight,opts,row.raw));
      const cvP=p+300; // v0.04: Fixed 300ms gap; does not scale with BPM.
      const pre=(shortMode?GROUP_OFFSET_SHORT:GROUP_OFFSET_CV)[group]??10;
      push(makeEntry(wav,s,'cv',s,cvP,pre,(shortMode?.2:.5)*B,(shortMode?.6:1.5)*B,opts,row.raw));
@@ -166,16 +172,16 @@ function generate(reclist,bgm,options={}){
    }
    if(mode==='CV'||mode==='RENTAN_FU'){
      const isStart=t==='CVVC' && row.spaced && !shortTrio;
-     const pre=isStart?150:(GROUP_OFFSET_CV[group]??100),kind=isStart?'start':'cv';
+     const pre=isStart?140:(GROUP_OFFSET_CV[group]??100),kind=isStart?'start':'cv';
      push(makeEntry(wav,isStart?'- '+s:s,kind,s,p,pre,(isStart?.25:mode==='CV'?.5:.25)*B,(isStart?.9:mode==='CV'?1.5:.9)*B,opts,row.raw));
    }else if(mode==='RENTAN_JUTSU'||t==='CVVC'){
      const first=i===0 && !shortTrio;
-     const pre=first?150:(GROUP_OFFSET_SHORT[group]??60);
+     const pre=first?140:(GROUP_OFFSET_SHORT[group]??60);
      // 連単術: first sound is -CV; final repeated sound is regular CV.
      const alias=first?'- '+s:s;
      push(makeEntry(wav,alias,first?'start':'cv',s,p,pre,.2*B,.6*B,opts,row.raw));
    }else if(t==='VCV'){
-     if(i===0){push(makeEntry(wav,'- '+s,'start',s,p,150,.25*B,.65*B,opts,row.raw));}
+     if(i===0){push(makeEntry(wav,'- '+s,'start',s,p,140,.25*B,.65*B,opts,row.raw));}
      else if(s==='ん'){
        const prev=vowelOf(ss[i-1]);const next=ss[i+1];const following=next?consonantOf(next):null;
        let marker=following===null?'2':following==='n'?'':following;
@@ -203,7 +209,8 @@ function generate(reclist,bgm,options={}){
   if(opts.generateR){
    const final=ss.at(-1),v=vowelOf(final);
    // Basic R from standalone vowels and from vowel-ending continuous VCV lines.
-   const isVowel=VOWEL_SET.has(final),eligible=(row.independent&&isVowel)||(t==='VCV'&&isVowel&&!shortRow);
+   // v0.06: Standalone ん also provides the ordinary n R tail.
+   const isVowel=VOWEL_SET.has(final),eligible=(row.independent&&(isVowel||final==='ん'))||(t==='VCV'&&isVowel&&!shortRow);
    if(eligible&&v){const n=row.independent?2:ss.length,pr=base+(n-.1)*B;push(makeEntry(wav,`${v} R`,'r',final,pr,.4*B,.4*B,.7*B,opts,row.raw));}
    if(opts.generateU2&&final==='つ'){
      const pr=base+((row.independent?2:ss.length)-.1)*B;push(makeEntry(wav,'u R2','r',final,pr,.4*B,.4*B,.7*B,opts,row.raw));
@@ -230,7 +237,7 @@ function existingAdjust(parsed,options){
  if(kind==='bx'){issues.push(`跳过 bX：${e.alias}（请使用 bX 派生功能）`);result.push({...e});continue;}
  if(kind==='r'){pre=.4*B;con=.4*B;right=.7*B;}
  else if(kind==='vc'){pre=160;con=30;right=['k','t','p','g','d','b'].includes(e.alias.split(' ').at(-1))?50:75;}
- else if(kind==='start'){pre=150;con=(mode==='VCV'?.25:mode==='RENTAN_FU'?.25:.2)*B;right=(mode==='VCV'?.65:mode==='RENTAN_FU'?.9:.6)*B;}
+ else if(kind==='start'){pre=140;con=(mode==='VCV'?.25:mode==='RENTAN_FU'?.25:.2)*B;right=(mode==='VCV'?.65:mode==='RENTAN_FU'?.9:.6)*B;}
  else if(kind==='vcv'){pre=.5*B;con=.25*B;right=.65*B;}
  else if(group){pre=((mode==='RENTAN_JUTSU'||mode==='CVVC')?GROUP_OFFSET_SHORT:GROUP_OFFSET_CV)[group]||60;con=(mode==='CV'?.5:mode==='RENTAN_FU'?.25:.2)*B;right=(mode==='CV'?1.5:mode==='RENTAN_FU'?.9:.6)*B;}
  else{issues.push(`无法判断 ${e.alias}，保持原参数`);result.push({...e});continue;}
@@ -244,5 +251,5 @@ function existingAdjust(parsed,options){
  return {entries:result,issues,lineSequence:parsed.lineSequence};
 }
 function otoText(entries,lineSequence=null){if(lineSequence){return lineSequence.map(part=>part.raw!==undefined?part.raw:(()=>{const e=entries[part.entryIndex];return `${e.wav}=${e.alias},${fmt(e.offset)},${fmt(e.consonant)},${fmt(e.cutoff)},${fmt(e.pre)},${fmt(e.overlap)}${e.tail||''}`;})()).join('\r\n');}return entries.map(e=>`${e.wav}=${e.alias},${fmt(e.offset)},${fmt(e.consonant)},${fmt(e.cutoff)},${fmt(e.pre)},${fmt(e.overlap)}${e.tail||''}`).join('\r\n')+'\r\n';}
-root.OTOEngine={parseReclist,parseBgm,generate,parseOto,existingAdjust,otoText,ALL,HIGH,LOW,NASAL_COMMON,NASAL_LOW,groupOf,parseTokens,fmt,overlap};
+root.OTOEngine={parseReclist,parseBgm,typeFromFilename,detectBpm,generate,parseOto,existingAdjust,otoText,ALL,HIGH,LOW,NASAL_COMMON,NASAL_LOW,groupOf,parseTokens,fmt,overlap};
 })(typeof globalThis!=='undefined'?globalThis:window);
