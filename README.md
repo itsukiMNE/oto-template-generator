@@ -1,4 +1,4 @@
-# UTAU OTO Template Generator v0.03
+# UTAU OTO Template Generator v0.04
 
 by itsukiMNE
 
@@ -43,7 +43,7 @@ by itsukiMNE
 
 ## 使用限制与注意事项
 
-- 这是 **v0.03 第一版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
+- 这是 **v0.04 测试版**：需要用实际录音表、录制 WAV 在 SetParam 中测试，尤其是 CVVC 的不同补充录音排列。
 - 目前不读取实际 WAV 音频长度；`Cutoff` 使用负值（从 Offset 计算的右边界）；如果某些发音超出音频长度，需要用户手动修改。
 - BGM TXT 支持 sec / msec；按编号 2、3 读取 Recording Start / Vocal Start，事件说明文字不限语言。BPM 优先从 TXT 中的 BPM 字段读取，其次尝试文件名（例如 Jazz-140-D#.txt），无法识别时允许手动填写。计算不自行假设 Recording Start 固定为 1.0 秒。
 - 无法识别的音素会显示警告并跳过，不做自动猜测；用户自定义音素需要后续扩展支持。
@@ -66,3 +66,10 @@ by itsukiMNE
 - 不再依赖英文事件名称，按 OREMO 标号 2（录音开始）、3（正式发声）读取时间。
 - BPM 可从 TXT 内容、BGM 文件名提取；缺失时可手动输入。
 - 其余 OTO 参数和生成逻辑不变。
+
+## v0.04 修订
+
+- 对 CV、連単風、連単術、CVVC 中的独立母音／「ん」录音，一条 WAV 同时生成句首 `- X` 与普通 `X`。CV 类型兼容不带 `_` 的录音名。
+- 两条先行线的 WAV 内绝对位置相隔固定 300ms；各自的 Offset、子音线、右线及 Overlap 按所属录音方式计算。
+- VCV 的 `_んん.wav` 保留 `n ん`，但 VC 生成排除目标为「ん」的连接，不产生 `n n`。
+- 其他录音行及已有 OTO 调整模式保持不变。

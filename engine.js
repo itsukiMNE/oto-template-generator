@@ -1,4 +1,4 @@
-// UTAU OTO Template Generator v0.01 — calculation engine. No audio analysis.
+// UTAU OTO Template Generator v0.04 — calculation engine. No audio analysis.
 // Source definitions are copied unchanged from UTAU Reclist Generator v0.44.
 (function(root){
 'use strict';
@@ -138,6 +138,18 @@ function generate(reclist,bgm,options={}){
    // Some recordings have vowels merely as carriers for ふゅ/てゅ/でゅ.
    if(shortRow&&VOWEL_SET.has(s))continue;
    const p=base+i*stride*B;
+   // v0.04: Standalone vowel/ん uses one sustained WAV for both - CV and CV.
+   // Keep both aliases even when a CV reclist filename has no leading underscore.
+   if(row.independent && (VOWEL_SET.has(s) || s==='ん') && ['CV','RENTAN_FU','RENTAN_JUTSU','CVVC'].includes(t)){
+     const shortMode=t==='RENTAN_JUTSU';
+     const startCon=(shortMode?.2:mode==='RENTAN_FU'?.25:.5)*B;
+     const startRight=(shortMode?.6:mode==='RENTAN_FU'?.9:1.5)*B;
+     push(makeEntry(wav,'- '+s,'start',s,p,150,startCon,startRight,opts,row.raw));
+     const cvP=p+300; // v0.04: Fixed 300ms gap; does not scale with BPM.
+     const pre=(shortMode?GROUP_OFFSET_SHORT:GROUP_OFFSET_CV)[group]??10;
+     push(makeEntry(wav,s,'cv',s,cvP,pre,(shortMode?.2:.5)*B,(shortMode?.6:1.5)*B,opts,row.raw));
+     continue;
+   }
    if(mode==='CV'||mode==='RENTAN_FU'){
      const isStart=t==='CVVC' && row.spaced;
      const pre=isStart?150:(GROUP_OFFSET_CV[group]??100),kind=isStart?'start':'cv';
@@ -165,7 +177,8 @@ function generate(reclist,bgm,options={}){
   if(['VCV','CVVC','RENTAN_JUTSU'].includes(t)&&!row.spaced){
    for(let i=1;i<ss.length;i++){
     const prev=vowelOf(ss[i-1]),next=ss[i],c=consonantOf(next);
-    if(!prev||!c||!vcEnabled.has(c))continue;
+    // v0.04: ん can generate VCV 'n ん', but never VC 'n n'.
+    if(next==='ん'||!prev||!c||!vcEnabled.has(c))continue;
     const alias=`${prev} ${c}`;
     if(seenVC.has(alias))continue;
     const nextP=base+i*B,vcP=nextP-.2*B,plosive=['k','t','p','g','d','b'].includes(c);
