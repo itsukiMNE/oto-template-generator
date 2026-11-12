@@ -1,4 +1,4 @@
-// UTAU OTO Template Generator v0.07 — calculation engine. No audio analysis.
+// UTAU OTO Template Generator v0.08 — calculation engine. No audio analysis.
 // Source definitions are copied unchanged from UTAU Reclist Generator v0.44.
 (function(root){
 'use strict';
@@ -144,7 +144,8 @@ function generate(reclist,bgm,options={}){
  // v0.02: Keep VC candidates separate; append once all regular OTO entries are generated.
  const lines=[],vcLines=[];const issues=[...reclist.issues];const B=bgm.beat,base=bgm.p0;
  const isShort=(t)=>t==='RENTAN_JUTSU'||t==='CVVC';
- const vcEnabled = reclist.type==='CVVC'?new Set(ALL):new Set(opts.vcGroups);
+ // v0.08: CVVC always includes high/medium VC; low-priority VC is optional.
+ const vcEnabled = reclist.type==='CVVC'?new Set([...ALL.filter(x=>!LOW.includes(x)),...opts.vcGroups.filter(x=>LOW.includes(x))]):new Set(opts.vcGroups);
  const nasalEnabled=new Set(opts.nasalGroups);
  const seenVC=new Set();
  const push=(e)=>{if(e)lines.push(e);};

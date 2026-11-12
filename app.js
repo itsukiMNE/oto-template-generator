@@ -37,9 +37,13 @@ function inspect(){try{
   }
   $('fileInfo').textContent=messages.join('\n')||'等待导入文件。';
   const type=r?.type||$('type').value;
-  const vc=['RENTAN_JUTSU','VCV'].includes(type),n=type==='VCV';
+  // v0.08: CVVC has fixed high/medium VC groups and selectable low-priority VC phonemes.
+  const vc=['RENTAN_JUTSU','VCV','CVVC'].includes(type),n=type==='VCV',cvvc=type==='CVVC';
   $('vcOptions').classList.toggle('hidden',!vc);$('nasalOptions').classList.toggle('hidden',!n);
-  if(vc && $('vcOptions').dataset.activeType!==type){for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value)&&!(n&&['n','m'].includes(x.value));$('vcOptions').dataset.activeType=type;}
+  $('vcGroups').classList.toggle('hidden',cvvc);$('cvvcVcGroups').classList.toggle('hidden',!cvvc);
+  if(vc && $('vcOptions').dataset.activeType!==type){for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value)&&!(n&&['n','m'].includes(x.value));
+   for(const x of document.querySelectorAll('input[name="cvvcLow"]'))x.checked=false;
+   $('vcOptions').dataset.activeType=type;}
  }else{if(files.oto)$('fileInfo').textContent=`已有 OTO · ${E.parseOto(files.oto).rows.length} 条 · 保留每条先行线绝对位置。`;}
  }catch(e){$('fileInfo').textContent='请检查输入：'+e.message;}}
 $('type').addEventListener('change',()=>{if(mode==='new')manualType=true;inspect();});
@@ -47,7 +51,18 @@ $('newManualBpm').addEventListener('input',()=>{manualNewBpm=true;inspect();});
 for(const b of document.querySelectorAll('[data-mode]'))b.addEventListener('click',()=>{mode=b.dataset.mode;for(const x of document.querySelectorAll('[data-mode]'))x.classList.toggle('active',x===b);$('newInputs').classList.toggle('hidden',mode!=='new');$('existingInputs').classList.toggle('hidden',mode!=='existing');$('newOptions').classList.toggle('hidden',mode!=='new');$('existingOptions').classList.toggle('hidden',mode!=='existing');$('fileInfo').textContent='等待导入文件。';if(mode==='existing'&&$('type').value==='')$('type').value='CV';results=null;render();inspect();});
 function renderGroups(container,defs){container.innerHTML='';for(const def of defs){const div=document.createElement('div');div.className='optiongroup';const header=document.createElement('div'),label=document.createElement('strong');label.textContent=def.title;const btn=document.createElement('button');btn.type='button';btn.textContent='全选 / 取消';header.append(label,btn);div.append(header);const chips=document.createElement('div');chips.className='chips';for(const name of def.items){const l=document.createElement('label'),c=document.createElement('input');c.type='checkbox';c.value=name;c.name=def.name;c.checked=def.checked.includes(name);l.append(c,document.createTextNode(' '+name));chips.append(l);}btn.addEventListener('click',()=>{const cs=[...chips.querySelectorAll('input')],all=cs.every(x=>x.checked);cs.forEach(x=>x.checked=!all);});div.append(chips);container.append(div);}}
 const medium=E.ALL.filter(x=>!E.HIGH.includes(x)&&!E.LOW.includes(x));
-renderGroups($('vcGroups'),[{name:'vc',title:'高优先度',items:E.HIGH,checked:E.HIGH},{name:'vc',title:'其他子音',items:medium,checked:[]},{name:'vc',title:'低优先度',items:E.LOW,checked:[]}]);
+renderGroups($('vcGroups'),[{name:'vc',title:'高优先度',items:E.HIGH,checked:E.HIGH},{name:'vc',title:'中优先度',items:medium,checked:[]},{name:'vc',title:'低优先度',items:E.LOW,checked:[]}]);
+// v0.08: CVVC high/medium VC phonemes are required and have no checkboxes.
+const fixedCvvc=[{title:'高优先度（固定生成）',items:E.HIGH},{title:'中优先度（固定生成）',items:medium}];
+for(const def of fixedCvvc){
+ const box=document.createElement('div');box.className='optiongroup';
+ const label=document.createElement('strong');label.textContent=def.title;box.append(label);
+ const chips=document.createElement('div');chips.className='chips';
+ for(const name of def.items){const item=document.createElement('span');item.className='fixed-vc';item.textContent=name;chips.append(item);}
+ box.append(chips);$('cvvcVcGroups').append(box);
+}
+const lowContainer=document.createElement('div');$('cvvcVcGroups').append(lowContainer);
+renderGroups(lowContainer,[{name:'cvvcLow',title:'低优先度（可选）',items:E.LOW,checked:[]}]);
 renderGroups($('nasalGroups'),[{name:'nasal',title:'常用拨音',items:E.NASAL_COMMON,checked:E.NASAL_COMMON},{name:'nasal',title:'低优先度拨音',items:E.NASAL_LOW,checked:[]}]);
 function chosen(name){return [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(x=>x.value);}
 function render(){const tbody=$('previewRows');tbody.innerHTML='';const entries=results?.entries||[],kind=$('filter').value,search=$('search').value.trim().toLowerCase();const shown=entries.filter(e=>(kind==='all'||kind===e.kind)&&(!search||e.alias.toLowerCase().includes(search)));for(const e of shown.slice(0,500)){const tr=document.createElement('tr');for(const val of [e.alias,e.wav,e.offset,e.consonant,e.cutoff,e.pre,e.overlap]){const td=document.createElement('td');td.textContent=String(val);tr.append(td);}tbody.append(tr);}if(!shown.length)tbody.innerHTML='<tr><td colspan="7">暂无对应条目。</td></tr>';
@@ -61,14 +76,15 @@ $('generate').addEventListener('click',()=>{try{
  if(mode==='new'){
   if(!files.reclist||!files.bgm)throw Error('请先导入 Reclist TXT 和 BGM TXT');
   const reclist=E.parseReclist(files.reclist,$('type').value||null,reclistFilename),bgm=E.parseBgm(files.bgm,bgmFilename,$('newManualBpm').value);
-  results=E.generate(reclist,bgm,{duplicate:$('duplicates').value,vcGroups:chosen('vc'),nasalGroups:chosen('nasal'),generateR:$('r').checked,generateU2:$('u2').checked,overlap:$('overlap').value});
+  results=E.generate(reclist,bgm,{duplicate:$('duplicates').value,vcGroups:reclist.type==='CVVC'?chosen('cvvcLow'):chosen('vc'),nasalGroups:chosen('nasal'),generateR:$('r').checked,generateU2:$('u2').checked,overlap:$('overlap').value});
  }else{
   if(!files.oto)throw Error('请先导入已有 oto.ini');const type=$('type').value||'CV',bpm=Number($('manualBpm').value);if(!(bpm>0))throw Error('BPM 必须大于零');
   const original=E.parseOto(files.oto);results=E.existingAdjust(original,{type,bpm,changeOffset:$('changeOffset').checked,changeConsonant:$('changeConsonant').checked,changeCutoff:$('changeCutoff').checked,changeOverlap:$('changeOverlap').checked,overlap:$('existingOverlap').value});results.counts={total:results.entries.length};
  }
  render();$('previewRows').scrollTop=0;
  }catch(e){results=null;render();$('fileInfo').textContent='无法生成：'+e.message;}});
-$('reset').addEventListener('click',()=>{for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value);for(const x of document.querySelectorAll('input[name="nasal"]'))x.checked=E.NASAL_COMMON.includes(x.value);$('duplicates').value='1';$('overlap').value='auto';$('r').checked=$('u2').checked=true;results=null;render();});
+$('reset').addEventListener('click',()=>{for(const x of document.querySelectorAll('input[name="vc"]'))x.checked=E.HIGH.includes(x.value)&&!($('type').value==='VCV'&&['n','m'].includes(x.value));
+for(const x of document.querySelectorAll('input[name="cvvcLow"]'))x.checked=false;for(const x of document.querySelectorAll('input[name="nasal"]'))x.checked=E.NASAL_COMMON.includes(x.value);$('duplicates').value='1';$('overlap').value='auto';$('r').checked=$('u2').checked=true;results=null;render();});
 function currentText(){return E.otoText(results.entries,results.lineSequence);}
 $('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(currentText());$('copy').textContent='已复制';setTimeout(()=>$('copy').textContent='复制完整 OTO',1300);}catch(e){alert('复制失败，请使用下载功能。');}});
 $('download').addEventListener('click',()=>{if(!results)return;const txt=currentText();let bytes;if($('encoding').value==='cp932'){
